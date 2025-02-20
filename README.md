@@ -6,22 +6,22 @@ An AI-powered tool that generates optimized marketing campaigns for hotels using
 
 Here's a visual walkthrough of the application:
 
-### 1. Landing Page
+### 1. First Message
 ![Landing Page](preview/01.png)
 
-### 2. Campaign Form
+### 2. Campaign Summary
 ![Campaign Form](preview/02.png)
 
-### 3. Generation Process
+### 3. Campaign Summary
 ![Generation Process](preview/03.png)
 
-### 4. Campaign Results
+### 4. Recursive Messaging
 ![Campaign Results](preview/04.png)
 
-### 5. Optimization Options
+### 5. Optimization Suggestions
 ![Optimization Options](preview/05.png)
 
-### 6. Final Dashboard
+### 6. Optmization Suggestions
 ![Final Dashboard](preview/06.png)
 
 ## Project Structure
