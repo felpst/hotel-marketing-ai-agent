@@ -29,6 +29,17 @@ const OptimizationResultCard: React.FC<OptimizationResultProps> = ({
     }
   };
 
+  const getActionBgColor = (action: string) => {
+    switch (action) {
+      case 'increase':
+        return 'bg-green-50';
+      case 'decrease':
+        return 'bg-red-50';
+      default:
+        return 'bg-blue-50';
+    }
+  };
+
   const getActionIcon = (action: string) => {
     switch (action) {
       case 'increase':
@@ -41,33 +52,38 @@ const OptimizationResultCard: React.FC<OptimizationResultProps> = ({
   };
 
   return (
-    <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-lg overflow-hidden">
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
-        <h3 className="text-xl font-bold text-white flex items-center">
-          <span className="mr-2">🎯</span> Optimization Results
-        </h3>
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-200">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
+            <span className="text-xl">🎯</span>
+          </div>
+          <h3 className="text-lg font-semibold text-gray-800">Optimization Results</h3>
+        </div>
       </div>
 
-      <div className="p-6 space-y-6">
+      <div className="divide-y divide-gray-100">
         {/* Current Metrics Section */}
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <div className="flex items-center mb-4">
-            <span className="text-xl mr-2">📊</span>
-            <h4 className="text-lg font-semibold text-gray-800">Current Metrics</h4>
+        <div className="px-6 py-4">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+              <span className="text-xl">📊</span>
+            </div>
+            <h4 className="text-sm font-medium text-gray-800">Current Metrics</h4>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <p className="text-sm font-medium text-gray-500">CTR</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
+              <p className="text-sm font-medium text-gray-500 mb-1">Click-Through Rate</p>
               <div className="flex items-baseline">
-                <span className="text-2xl font-bold text-blue-700">
+                <span className="text-xl font-semibold text-gray-900">
                   {currentMetrics.CTR}%
                 </span>
               </div>
             </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <p className="text-sm font-medium text-gray-500">ROAS</p>
+            <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
+              <p className="text-sm font-medium text-gray-500 mb-1">Return on Ad Spend</p>
               <div className="flex items-baseline">
-                <span className="text-2xl font-bold text-green-700">
+                <span className="text-xl font-semibold text-gray-900">
                   {currentMetrics.ROAS}x
                 </span>
               </div>
@@ -76,45 +92,32 @@ const OptimizationResultCard: React.FC<OptimizationResultProps> = ({
         </div>
 
         {/* Recommendations Section */}
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <div className="flex items-center mb-4">
-            <span className="text-xl mr-2">💡</span>
-            <h4 className="text-lg font-semibold text-gray-800">Recommendations</h4>
+        <div className="px-6 py-4">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
+              <span className="text-xl">💡</span>
+            </div>
+            <h4 className="text-sm font-medium text-gray-800">Recommendations</h4>
           </div>
           
-          <div className="space-y-4">
-            {/* Action and Budget */}
-            <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center">
-                <span className="text-2xl mr-3">
-                  {getActionIcon(recommendations.action)}
-                </span>
-                <div>
-                  <p className="text-sm text-gray-500">Recommended Action</p>
-                  <p className={`text-lg font-bold capitalize ${getActionColor(recommendations.action)}`}>
-                    {recommendations.action} budget
-                  </p>
-                </div>
+          <div className={`p-4 rounded-xl ${getActionBgColor(recommendations.action)} border border-gray-100`}>
+            <div className="flex items-start space-x-4">
+              <div className="mt-1">
+                <span className="text-2xl">{getActionIcon(recommendations.action)}</span>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500">New Budget</p>
-                <p className="text-lg font-bold text-gray-900">
-                  ${recommendations.budget}
+              <div className="flex-1">
+                <div className="flex items-baseline justify-between mb-2">
+                  <h5 className={`text-base font-medium ${getActionColor(recommendations.action)}`}>
+                    {recommendations.action === 'increase' ? 'Increase Budget' : 
+                     recommendations.action === 'decrease' ? 'Decrease Budget' : 'Maintain Budget'}
+                  </h5>
+                  <span className="text-lg font-semibold text-gray-900">
+                    ${recommendations.budget}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {recommendations.message}
                 </p>
-              </div>
-            </div>
-
-            {/* Message */}
-            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <span className="text-yellow-400 text-xl">ℹ️</span>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-yellow-700">
-                    {recommendations.message}
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -122,12 +125,43 @@ const OptimizationResultCard: React.FC<OptimizationResultProps> = ({
       </div>
 
       {timestamp && (
-        <div className="px-6 py-3 bg-white border-t">
-          <p className="text-xs text-gray-500">{timestamp}</p>
+        <div className="px-6 py-3 bg-gray-50 border-t border-gray-100">
+          <p className="text-xs text-gray-400">{formatTimestamp(timestamp)}</p>
         </div>
       )}
     </div>
   );
+};
+
+const formatTimestamp = (timestamp: string): string => {
+  const now = new Date();
+  const messageTime = new Date();
+  const [time, period] = timestamp.split(' ');
+  const [hours, minutes, seconds] = time.split(':');
+  
+  messageTime.setHours(
+    period === 'PM' ? parseInt(hours) + 12 : parseInt(hours),
+    parseInt(minutes),
+    parseInt(seconds)
+  );
+
+  const diffInSeconds = Math.floor((now.getTime() - messageTime.getTime()) / 1000);
+
+  if (diffInSeconds < 60) {
+    return `${diffInSeconds} sec${diffInSeconds !== 1 ? 's' : ''} ago`;
+  }
+
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes} min${diffInMinutes !== 1 ? 's' : ''} ago`;
+  }
+
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return `${diffInHours} hr${diffInHours !== 1 ? 's' : ''} ago`;
+  }
+
+  return messageTime.toLocaleDateString();
 };
 
 export default OptimizationResultCard; 
