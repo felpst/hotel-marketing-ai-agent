@@ -86,6 +86,10 @@ const getMessageContent = (message: BaseMessage): string => {
 
 // Supervisor Node: Determines the campaign phase based on state
 const supervisorNode = async (state: typeof StateAnnotation.State) => {
+  // If we have metrics, we're in OPTIMIZATION phase
+  if (Object.keys(state.metrics).length > 0) {
+    return { campaignPhase: "OPTIMIZATION" };
+  }
   // If no keywords exist, we're in PHASE1 (research); otherwise, move to PHASE2
   const phase = (state.keywords && state.keywords.length > 0) ? "PHASE2" : "PHASE1";
   return { campaignPhase: phase };
@@ -93,6 +97,11 @@ const supervisorNode = async (state: typeof StateAnnotation.State) => {
 
 // Research Node: Generates niche keywords and initial audiences
 const researchNode = async (state: typeof StateAnnotation.State) => {
+  // Skip if we're in optimization phase
+  if (state.campaignPhase === "OPTIMIZATION") {
+    return { keywords: state.keywords, audiences: state.audiences };
+  }
+
   const systemPrompt = new SystemMessage(
     "You are a hotel marketing expert. Generate niche keywords and target audiences based on hotel details."
   );
@@ -121,6 +130,11 @@ ${format_instructions}`
 
 // Geo Node: Refines audience selection using geofencing logic
 const geoNode = async (state: typeof StateAnnotation.State) => {
+  // Skip if we're in optimization phase
+  if (state.campaignPhase === "OPTIMIZATION") {
+    return { audiences: state.audiences };
+  }
+
   const systemPrompt = new SystemMessage(
     "You are a location targeting expert. Determine the best feeder markets for a hotel."
   );
@@ -156,6 +170,11 @@ ${format_instructions}`
 
 // Copywriter Node: Generates multiple ad copy variations
 const copywriterNode = async (state: typeof StateAnnotation.State) => {
+  // Skip if we're in optimization phase
+  if (state.campaignPhase === "OPTIMIZATION") {
+    return { adCopies: state.adCopies };
+  }
+
   const systemPrompt = new SystemMessage(
     "You are an expert ad copywriter. Create compelling ad variations based on keywords and audiences."
   );
@@ -198,12 +217,22 @@ const optimizerNode = (state: typeof StateAnnotation.State) => {
   if (metrics.CTR && metrics.CTR < rules.lowCTR.threshold) {
     optimizationSuggestion = { 
       action: "reduceBid", 
-      newBid: metrics.currentBid ? metrics.currentBid * 0.9 : 0 
+      newBid: metrics.currentBid ? metrics.currentBid * 0.9 : 0,
+      CTR: metrics.CTR,
+      ROAS: metrics.ROAS
     };
   } else if (metrics.ROAS && metrics.ROAS > rules.highROAS.threshold) {
     optimizationSuggestion = { 
       action: "increaseBudget", 
-      newBudget: metrics.currentBudget ? metrics.currentBudget * 1.1 : 0 
+      newBudget: metrics.currentBudget ? metrics.currentBudget * 1.1 : 0,
+      CTR: metrics.CTR,
+      ROAS: metrics.ROAS
+    };
+  } else {
+    optimizationSuggestion = {
+      action: "maintain",
+      message: "Current performance is within acceptable ranges",
+      ...metrics
     };
   }
   return { metrics: optimizationSuggestion };
