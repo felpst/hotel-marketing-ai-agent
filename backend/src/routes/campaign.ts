@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { campaignGraph } from '../../graph/campaignGraph';
+import { campaignGraph } from '../graph/campaignGraph';
 import { HumanMessage } from '@langchain/core/messages';
 
 const router = Router();

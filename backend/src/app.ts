@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
-import campaignRoutes from './api/routes/campaign';
+import campaignRoutes from './routes/campaign';
 
 // Load environment variables
 config();
