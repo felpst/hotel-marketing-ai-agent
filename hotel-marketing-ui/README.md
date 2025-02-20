@@ -1,36 +1,137 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hotel Marketing Campaign Generator UI
 
-## Getting Started
+A modern Next.js application for generating and managing hotel marketing campaigns, built with Next.js 14, React, and Tailwind CSS.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Modern, responsive UI built with Next.js and Tailwind CSS
+- Real-time campaign generation progress updates
+- Interactive dashboard for campaign management
+- Form validation and error handling
+- Server-side rendering for optimal performance
+- Mobile-first design approach
+
+## Prerequisites
+
+- Node.js 18 or higher
+- npm or yarn package manager
+- Backend service running (see backend README)
+
+## Installation
+
+1. Clone the repository
+2. Navigate to the project directory:
+   ```bash
+   cd hotel-marketing-ui
+   ```
+3. Install dependencies:
+   ```bash
+   npm install
+   ```
+4. Create a `.env.local` file in the root directory:
+   ```
+   NEXT_PUBLIC_API_URL=http://localhost:3001
+   ```
+
+## Project Structure
+
+```
+hotel-marketing-ui/
+├── src/
+│   ├── app/           # Next.js app router pages
+│   ├── components/    # Reusable React components
+│   └── services/      # API service functions
+├── public/           # Static assets
+└── package.json
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Available Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `npm run dev`: Start the development server
+- `npm run build`: Build the production application
+- `npm start`: Start the production server
+- `npm run lint`: Run ESLint
+- `npm run test`: Run tests
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Key Components
 
-## Learn More
+### Campaign Form
+- Input validation for hotel details
+- Real-time feedback
+- Progress indicators
 
-To learn more about Next.js, take a look at the following resources:
+### Campaign Dashboard
+- Display generated keywords
+- Show ad copy variations
+- Audience segment visualization
+- Budget recommendations
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Real-time Updates
+- WebSocket/SSE integration for live progress
+- Status indicators
+- Error handling
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Styling
 
-## Deploy on Vercel
+The project uses Tailwind CSS for styling with a custom configuration:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Custom color palette
+- Responsive breakpoints
+- Typography system
+- Component variants
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Development
+
+### Adding New Components
+
+1. Create component in `src/components`
+2. Add styles using Tailwind classes
+3. Import and use in pages
+
+### API Integration
+
+The `src/services` directory contains API client functions:
+
+```typescript
+// Example API call
+const generateCampaign = async (data) => {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/generate-campaign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return response.json();
+};
+```
+
+## Deployment
+
+1. Build the project:
+   ```bash
+   npm run build
+   ```
+
+2. Deploy to your preferred platform (e.g., Vercel):
+   ```bash
+   vercel deploy
+   ```
+
+## Best Practices
+
+- Use TypeScript for type safety
+- Follow Next.js best practices
+- Implement proper error boundaries
+- Use React hooks effectively
+- Maintain consistent code style
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+MIT
