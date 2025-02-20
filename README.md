@@ -2,6 +2,28 @@
 
 An AI-powered tool that generates optimized marketing campaigns for hotels using LangGraph.js and Next.js.
 
+## Preview
+
+Here's a visual walkthrough of the application:
+
+### 1. Landing Page
+![Landing Page](preview/01.png)
+
+### 2. Campaign Form
+![Campaign Form](preview/02.png)
+
+### 3. Generation Process
+![Generation Process](preview/03.png)
+
+### 4. Campaign Results
+![Campaign Results](preview/04.png)
+
+### 5. Optimization Options
+![Optimization Options](preview/05.png)
+
+### 6. Final Dashboard
+![Final Dashboard](preview/06.png)
+
 ## Project Structure
 
 - `backend/` - Express.js backend with LangGraph.js implementation
