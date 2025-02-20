@@ -94,102 +94,208 @@
 
 ### **Technical Requirements:**
 
-#### **A. Define a Rich State Schema & Initialize LangGraph:**
-- Create a state model to persist campaign data:
-  ```javascript
-  import { Annotation, messagesStateReducer, StateGraph } from "@langchain/langgraph";
+```javascript
+// campaignGraph.js
 
-  const campaignState = Annotation.Root({
-    messages: Annotation({
-      reducer: messagesStateReducer,
-    }),
-    keywords: [],
-    audiences: [],
-    adCopies: [],
-    metrics: {}
-  });
-  ```
+import { Annotation, messagesStateReducer, StateGraph } from "@langchain/langgraph";
+import { ChatOpenAI } from "@langchain/openai";
+import { z } from "zod";
 
-#### **B. Design Specialized Agents (Nodes):**
-- **Supervisor Agent:**  
-  Orchestrates and routes tasks based on campaign phase.
-  ```javascript
-  const supervisorNode = async (state) => {
-    // Determine campaign phase based on state (e.g., presence of keywords)
-    const phase = state.keywords && state.keywords.length ? "PHASE2" : "PHASE1";
-    return { campaignPhase: phase };
-  };
-  ```
-- **Research Agent (Keyword & Audience Discovery):**
-  ```javascript
-  import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
-  const researchNode = async (state) => {
-    const tools = [new TavilySearchResults({ maxResults: 15 })];
-    const agent = createReactAgent({
-      llm: new ChatOpenAI(), // Configure your LLM as needed
-      tools,
-      systemMessage: "Find niche keywords avoiding broad terms like 'hotels'."
-    });
-    const result = await agent.invoke(state);
-    return { keywords: result.keywords, audiences: result.audiences };
-  };
-  ```
-- **Geo-Targeting Agent:**
-  ```javascript
-  const geoNode = async (state) => {
-    const prompt = `Based on the website content and hotel rating, determine the feeder markets for high-ROAS campaigns.`;
-    const response = await yourLLM.invoke(prompt);
-    return { audiences: response.feederCities };
-  };
-  ```
-- **Ad Copy Generator Agent:**
-  ```javascript
-  const copywriterNode = async (state) => {
-    const generator = await createReactAgent({
-      llm: new ChatOpenAI({ temperature: 0.7 }),
-      systemMessage: `Generate 3 ad variations using the following keywords: ${state.keywords.join(", ")}.`
-    });
-    const result = await generator.invoke(state);
-    return { adCopies: result.adCopies };
-  };
-  ```
-- **Optimizer Agent:**
-  ```javascript
-  const optimizerNode = (state) => {
-    const rules = {
-      lowCTR: { action: "reduceBid", threshold: 2 },
-      highROAS: { action: "increaseBudget", threshold: 300 }
-    };
-    return { metrics: applyRules(state.metrics, rules) };
-  };
-  ```
+/* ----------------------------
+   1. Define Structured Output Schemas
+------------------------------- */
+// Schema for research node: generates keywords and audiences.
+const ResearchOutputSchema = z.object({
+  keywords: z.array(z.string()).describe("List of targeted keywords for the campaign"),
+  audiences: z.array(z.string()).describe("List of audience segments")
+});
 
-#### **C. Build the LangGraph Workflow:**
-- Assemble nodes and define conditional edges:
-  ```javascript
-  const builder = new StateGraph(campaignState)
-    .addNode("supervisor", supervisorNode)
-    .addNode("research", researchNode)
-    .addNode("geo", geoNode)
-    .addNode("copywriter", copywriterNode)
-    .addNode("optimizer", optimizerNode);
-
-  builder
-    .addEdge("__start__", "supervisor")
-    .addConditionalEdges("supervisor", (state) => state.campaignPhase, {
-      PHASE1: "research",
-      PHASE2: "copywriter",
-      OPTIMIZATION: "optimizer"
+// Schema for copywriter node: generates ad copy variations.
+const CopywriterOutputSchema = z.object({
+  adCopies: z.array(
+    z.object({
+      headline: z.string().describe("Ad headline text"),
+      description: z.string().describe("Ad description text")
     })
-    .addEdge("research", "geo")
-    .addEdge("geo", "copywriter")
-    .addEdge("copywriter", "optimizer")
-    .addEdge("optimizer", "__end__");
+  ).describe("List of ad copy variations")
+});
 
-  export const campaignGraph = builder.compile();
-  ```
+/* ----------------------------
+   2. Define the Campaign State Schema
+------------------------------- */
+const campaignState = Annotation.Root({
+  messages: Annotation({
+    reducer: messagesStateReducer,
+  }),
+  keywords: Annotation({
+    reducer: (prev, curr) => curr,
+    initial: []
+  }),
+  audiences: Annotation({
+    reducer: (prev, curr) => curr,
+    initial: []
+  }),
+  adCopies: Annotation({
+    reducer: (prev, curr) => curr,
+    initial: []
+  }),
+  metrics: Annotation({
+    reducer: (prev, curr) => curr,
+    initial: {}
+  })
+});
 
----
+/* ----------------------------
+   3. LLM Configuration with Structured Output
+------------------------------- */
+// Base LLM configuration using GPT-4o.
+const baseLLM = new ChatOpenAI({
+  model: "gpt-4o",       // Use GPT-4o model
+  temperature: 0.3,      // Lower temperature for deterministic output
+});
+
+// Wrap the base LLM for nodes requiring structured output.
+const llmForResearch = baseLLM.withStructuredOutput(ResearchOutputSchema);
+const llmForCopywriter = baseLLM.withStructuredOutput(CopywriterOutputSchema);
+// Use the base LLM for nodes that don't need structured output.
+const llm = baseLLM;
+
+/* ----------------------------
+   4. Node Implementations
+------------------------------- */
+
+// Supervisor Node: Determines the campaign phase based on state.
+const supervisorNode = async (state) => {
+  // If no keywords exist, we're in PHASE1 (research); otherwise, move to PHASE2.
+  const phase = (state.keywords && state.keywords.length > 0) ? "PHASE2" : "PHASE1";
+  return { campaignPhase: phase };
+};
+
+// Research Node: Generates niche keywords and initial audiences.
+const researchNode = async (state) => {
+  const prompt = `Given the hotel details: ${state.messages[0].content},
+generate niche keywords (avoid broad terms like "hotels") and suggest target audiences.
+Return the result as JSON with keys "keywords" (array of strings) and "audiences" (array of strings).`;
+  
+  const response = await llmForResearch.invoke([{ role: "user", content: prompt }]);
+  // The response is automatically validated against ResearchOutputSchema.
+  return { keywords: response.keywords, audiences: response.audiences };
+};
+
+// Geo Node: Refines audience selection using geofencing logic.
+const geoNode = async (state) => {
+  const prompt = `Based on the following hotel details: ${state.messages[0].content},
+determine feeder markets (cities) for a high-ROAS campaign.
+Return the result as JSON with key "feederCities" as an array of strings.`;
+  
+  const response = await llm.invoke([{ role: "user", content: prompt }]);
+  let result;
+  try {
+    result = JSON.parse(response.content);
+  } catch (e) {
+    result = { feederCities: [] };
+  }
+  return { audiences: result.feederCities };
+};
+
+// Copywriter Node: Generates multiple ad copy variations.
+const copywriterNode = async (state) => {
+  const prompt = `Using the following keywords: ${state.keywords.join(", ")},
+generate three ad copy variations for a hotel marketing campaign.
+Each variation should include a headline and a description.
+Return the result as JSON with key "adCopies" (an array of objects with "headline" and "description").`;
+  
+  const response = await llmForCopywriter.invoke([{ role: "user", content: prompt }]);
+  return { adCopies: response.adCopies };
+};
+
+// Optimizer Node: Applies rule-based logic to adjust campaign metrics.
+const optimizerNode = (state) => {
+  const rules = {
+    lowCTR: { action: "reduceBid", threshold: 2 },
+    highROAS: { action: "increaseBudget", threshold: 300 }
+  };
+  const metrics = state.metrics;
+  let optimizationSuggestion = {};
+  
+  if (metrics.CTR < rules.lowCTR.threshold) {
+    optimizationSuggestion = { action: "reduceBid", newBid: metrics.currentBid * 0.9 };
+  } else if (metrics.ROAS > rules.highROAS.threshold) {
+    optimizationSuggestion = { action: "increaseBudget", newBudget: metrics.currentBudget * 1.1 };
+  }
+  return { metrics: optimizationSuggestion };
+};
+
+/* ----------------------------
+   5. Build the LangGraph Workflow
+------------------------------- */
+const builder = new StateGraph(campaignState)
+  .addNode("supervisor", supervisorNode)
+  .addNode("research", researchNode)
+  .addNode("geo", geoNode)
+  .addNode("copywriter", copywriterNode)
+  .addNode("optimizer", optimizerNode);
+
+// Define edges and conditional routing:
+builder
+  .addEdge("__start__", "supervisor")
+  .addConditionalEdges("supervisor", (state) => state.campaignPhase, {
+    PHASE1: "research",
+    PHASE2: "copywriter",
+    OPTIMIZATION: "optimizer"
+  })
+  .addEdge("research", "geo")
+  .addEdge("geo", "copywriter")
+  .addEdge("copywriter", "optimizer")
+  .addEdge("optimizer", "__end__");
+
+// Compile the graph into a runnable workflow.
+export const campaignGraph = builder.compile();
+
+/* ----------------------------
+   6. Example Usage (for testing)
+------------------------------- */
+/*
+const initialState = {
+  messages: [{ role: "user", content: "Hotel Name: Lily Hall, Website: https://www.lilyhall.com" }],
+  keywords: [],
+  audiences: [],
+  adCopies: [],
+  metrics: { CTR: 1.5, ROAS: 250, currentBid: 100, currentBudget: 500 }
+};
+
+campaignGraph.invoke(initialState)
+  .then(finalState => {
+    console.log("Final Campaign Output:", finalState);
+  })
+  .catch(error => console.error("Error in campaign workflow:", error));
+*/
+```
+
+### Explanation
+
+1. **Structured Output Schemas:**  
+   - We define two schemas using Zod: one for the research node and one for the copywriter node. This ensures that outputs from the LLM are well-structured and validated.
+
+2. **Campaign State Schema:**  
+   - The state includes messages, keywords, audiences, ad copies, and campaign metrics, using LangGraph’s Annotation with a custom reducer.
+
+3. **LLM Configuration:**  
+   - The base LLM is configured with GPT-4o, a low temperature, and a max token limit.
+   - Two specialized LLM instances (`llmForResearch` and `llmForCopywriter`) are wrapped with structured output using their respective schemas.
+
+4. **Node Implementations:**  
+   - **Supervisor Node:** Decides the campaign phase based on whether keywords exist.
+   - **Research Node:** Uses the structured LLM (`llmForResearch`) to generate niche keywords and audience suggestions.
+   - **Geo Node:** Further refines the audience using geofencing logic.
+   - **Copywriter Node:** Uses the structured LLM (`llmForCopywriter`) to generate ad copy variations.
+   - **Optimizer Node:** Applies rule-based logic for performance-based adjustments.
+
+5. **Workflow Construction:**  
+   - Nodes are connected using conditional edges that route based on the campaign phase. The workflow is compiled into a runnable graph (`campaignGraph`).
+
+This integrated code for Step 4 is now ready to be used within your backend API to orchestrate the multi-step campaign generation process with structured output and proper LLM configuration.
+
 
 ## **Step 5: Orchestrating the Workflow via API**  
 
