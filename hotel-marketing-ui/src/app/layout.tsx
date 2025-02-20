@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Hotel Marketing Campaign Generator",
-  description: "Generate optimized marketing campaigns for your hotel with AI",
+  title: "Hotel Marketing Campaign Manager",
+  description: "AI-powered tool for generating and optimizing hotel marketing campaigns",
 };
 
 export default function RootLayout({
@@ -16,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased`}>{children}</body>
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }

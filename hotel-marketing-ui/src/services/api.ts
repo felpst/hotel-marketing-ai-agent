@@ -1,41 +1,87 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import axios from 'axios';
 
-export interface CampaignInput {
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+
+export interface HotelDetails {
   hotelName: string;
   hotelUrl: string;
 }
 
-export interface CampaignResponse {
+export interface AdCopy {
+  headline: string;
+  body: string;
+}
+
+export interface Campaign {
   keywords: string[];
-  adCopies: {
-    headline: string;
-    body: string;
-  }[];
-  audiences: string[];
+  adCopies: AdCopy[];
+  audienceLocations: string[];
   dailyBudget: number;
 }
 
-export async function generateCampaign(input: CampaignInput): Promise<CampaignResponse> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/generate-campaign`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(input),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error generating campaign:', error);
-    throw error;
-  }
+export interface CampaignMetrics {
+  CTR: number;
+  ROAS: number;
+  currentBid?: number;
+  currentBudget?: number;
 }
+
+export interface OptimizationResult {
+  action: string;
+  newBid?: number;
+  newBudget?: number;
+  message?: string;
+  CTR: number;
+  ROAS: number;
+}
+
+const api = {
+  generateCampaign: async (hotelDetails: HotelDetails): Promise<Campaign> => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/campaign/generate`, {
+        hotelName: hotelDetails.hotelName,
+        hotelUrl: hotelDetails.hotelUrl
+      });
+      
+      if (response.data.status === 'error') {
+        throw new Error(response.data.message || 'Failed to generate campaign');
+      }
+
+      const campaign = response.data.campaign || {};
+      
+      // Ensure we have all required fields with proper defaults
+      return {
+        keywords: Array.isArray(campaign.keywords) ? campaign.keywords : [],
+        adCopies: Array.isArray(campaign.adCopies) ? campaign.adCopies.map((ad: any) => ({
+          headline: ad.headline || '',
+          body: ad.body || ''
+        })) : [],
+        audienceLocations: Array.isArray(campaign.audienceLocations) ? campaign.audienceLocations : [],
+        dailyBudget: typeof campaign.dailyBudget === 'number' ? campaign.dailyBudget : 500
+      };
+    } catch (error) {
+      console.error('Error generating campaign:', error);
+      throw error;
+    }
+  },
+
+  optimizeCampaign: async (metrics: CampaignMetrics): Promise<OptimizationResult> => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/campaign/optimize`, { metrics });
+      
+      if (response.data.status === 'error') {
+        throw new Error(response.data.message || 'Failed to optimize campaign');
+      }
+      
+      return response.data.optimization;
+    } catch (error) {
+      console.error('Error optimizing campaign:', error);
+      throw error;
+    }
+  }
+};
+
+export default api;
 
 // Function to check backend health
 export async function checkHealth(): Promise<boolean> {

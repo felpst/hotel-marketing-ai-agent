@@ -1,17 +1,31 @@
 import { StateGraph, END } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
 import { z } from "zod";
 import { BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { Annotation, messagesStateReducer, MemorySaver } from "@langchain/langgraph";
 import { StructuredOutputParser } from "langchain/output_parsers";
+import * as dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
+
+// Ensure required environment variables are present
+if (!process.env.TAVILY_API_KEY) {
+  throw new Error('TAVILY_API_KEY environment variable is not set');
+}
+
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error('OPENAI_API_KEY environment variable is not set');
+}
 
 /* ----------------------------
    1. Define Structured Output Schemas
 ------------------------------- */
-// Schema for research node: generates keywords and audiences
+// Schema for research node: generates keywords and audience locations
 const ResearchOutputSchema = z.object({
-  keywords: z.array(z.string()).describe("List of targeted keywords for the campaign"),
-  audiences: z.array(z.string()).describe("List of audience segments")
+  keywords: z.array(z.string()).describe("List of 5-10 targeted keywords for the campaign"),
+  audienceLocations: z.array(z.string()).describe("List of specific locations to target")
 });
 
 // Schema for copywriter node: generates ad copy variations
@@ -19,7 +33,7 @@ const CopywriterOutputSchema = z.object({
   adCopies: z.array(
     z.object({
       headline: z.string().describe("Ad headline text"),
-      description: z.string().describe("Ad description text")
+      body: z.string().describe("Ad body text")
     })
   ).describe("List of ad copy variations")
 });
@@ -40,30 +54,32 @@ const StateAnnotation = Annotation.Root({
     reducer: (prev: string[], curr: string[]) => curr,
     default: () => [] as string[],
   }),
-  audiences: Annotation({
+  audienceLocations: Annotation({
     reducer: (prev: string[], curr: string[]) => curr,
     default: () => [] as string[],
   }),
   adCopies: Annotation({
-    reducer: (prev: Array<{ headline: string; description: string }>, curr: Array<{ headline: string; description: string }>) => curr,
-    default: () => [] as Array<{ headline: string; description: string }>,
+    reducer: (prev: Array<{ headline: string; body: string }>, curr: Array<{ headline: string; body: string }>) => curr,
+    default: () => [] as Array<{ headline: string; body: string }>,
   }),
-  metrics: Annotation({
-    reducer: (prev: Record<string, number>, curr: Record<string, number>) => ({ ...prev, ...curr }),
-    default: () => ({} as Record<string, number>),
-  }),
-  campaignPhase: Annotation({
-    reducer: (prev: string | undefined, curr: string | undefined) => curr,
-    default: () => undefined as string | undefined,
-  }),
+  dailyBudget: Annotation({
+    reducer: (prev: number, curr: number) => curr,
+    default: () => 0,
+  })
 });
 
 /* ----------------------------
    3. LLM Configuration
 ------------------------------- */
 const baseLLM = new ChatOpenAI({
-  modelName: "gpt-4o",
+  modelName: "gpt-4",
   temperature: 0.3,
+});
+
+// Initialize Tavily search with API key from environment
+const tavily = new TavilySearchResults({
+  apiKey: process.env.TAVILY_API_KEY,
+  maxResults: 3
 });
 
 /* ----------------------------
@@ -84,113 +100,103 @@ const getMessageContent = (message: BaseMessage): string => {
   return JSON.stringify(content);
 };
 
-// Supervisor Node: Determines the campaign phase based on state
-const supervisorNode = async (state: typeof StateAnnotation.State) => {
-  // If we have metrics, we're in OPTIMIZATION phase
-  if (Object.keys(state.metrics).length > 0) {
-    return { campaignPhase: "OPTIMIZATION" };
-  }
-  // If no keywords exist, we're in PHASE1 (research); otherwise, move to PHASE2
-  const phase = (state.keywords && state.keywords.length > 0) ? "PHASE2" : "PHASE1";
-  return { campaignPhase: phase };
-};
-
-// Research Node: Generates niche keywords and initial audiences
+// Research Node: Generates keywords and audience locations
 const researchNode = async (state: typeof StateAnnotation.State) => {
-  // Skip if we're in optimization phase
-  if (state.campaignPhase === "OPTIMIZATION") {
-    return { keywords: state.keywords, audiences: state.audiences };
-  }
-
+  const hotelInfo = JSON.parse(getMessageContent(state.messages[0]));
+  
+  // Use Tavily to research the hotel and its market
+  const searchQuery = `${hotelInfo.name} hotel reviews location amenities luxury market analysis`;
+  const searchResults = await tavily.invoke(searchQuery);
+  
   const systemPrompt = new SystemMessage(
-    "You are a hotel marketing expert. Generate niche keywords and target audiences based on hotel details."
+    `You are a Google SEM expert specializing in luxury hotel marketing. Your task is to:
+    1. Generate 5-10 highly specific, long-tail keywords that will maximize ROAS
+    2. Identify 3-5 specific geographic locations (feeder markets) to target
+    
+    Use this market research data to inform your decisions:
+    ${JSON.stringify(searchResults, null, 2)}
+    
+    Guidelines:
+    - Keywords should focus on luxury travel, unique experiences, and high-value amenities
+    - Target locations should be wealthy areas or cities with high travel spending
+    - Consider both domestic and international markets where relevant
+    - Focus on locations with direct flights or easy access to the hotel`
   );
   
   const format_instructions = researchParser.getFormatInstructions();
   
   const userPrompt = new HumanMessage(
-    `Given the hotel details: ${getMessageContent(state.messages[0])},
-generate niche keywords (avoid broad terms like "hotels") and suggest target audiences.
-Focus on unique selling points and specific customer segments.
-
-${format_instructions}`
+    `Based on this hotel information: ${getMessageContent(state.messages[0])},
+    and the market research data above, generate targeted keywords and identify specific audience locations.
+    
+    Requirements:
+    - Keywords should be specific and focused on high ROAS
+    - Locations should be specific cities or regions that are likely to be profitable feeder markets
+    
+    ${format_instructions}`
   );
   
   const response = await baseLLM.invoke([systemPrompt, userPrompt]);
   
   try {
     const result = await researchParser.parse(getMessageContent(response));
-    return { keywords: result.keywords, audiences: result.audiences };
+    return {
+      keywords: result.keywords,
+      audienceLocations: result.audienceLocations
+    };
   } catch (error) {
     console.error("Error parsing research node response:", error);
-    console.log("Raw response:", getMessageContent(response));
-    return { keywords: [], audiences: [] };
+    // Provide meaningful fallback values based on the hotel's location
+    const defaultLocations = hotelInfo.location?.includes("New York") 
+      ? ["Boston", "Philadelphia", "Washington DC", "Toronto", "London"]
+      : ["New York City", "Los Angeles", "Chicago", "Miami", "London"];
+    
+    return { 
+      keywords: [
+        "luxury hotel experience",
+        "5-star hotel accommodation",
+        "premium city hotel",
+        "luxury weekend getaway",
+        "exclusive hotel suite"
+      ],
+      audienceLocations: defaultLocations
+    };
   }
 };
 
-// Geo Node: Refines audience selection using geofencing logic
-const geoNode = async (state: typeof StateAnnotation.State) => {
-  // Skip if we're in optimization phase
-  if (state.campaignPhase === "OPTIMIZATION") {
-    return { audiences: state.audiences };
-  }
-
-  const systemPrompt = new SystemMessage(
-    "You are a location targeting expert. Determine the best feeder markets for a hotel."
-  );
-  
-  const geoSchema = z.object({
-    feederCities: z.array(z.string()).describe("List of high-potential feeder market cities")
-  });
-  const geoParser = StructuredOutputParser.fromZodSchema(geoSchema);
-  const format_instructions = geoParser.getFormatInstructions();
-  
-  const userPrompt = new HumanMessage(
-    `Based on the following hotel details: ${getMessageContent(state.messages[0])},
-determine feeder markets (cities) for a high-ROAS campaign.
-Consider factors like:
-- Travel distance and accessibility
-- Income levels and travel patterns
-- Seasonal tourism trends
-
-${format_instructions}`
-  );
-  
-  const response = await baseLLM.invoke([systemPrompt, userPrompt]);
-  
-  try {
-    const result = await geoParser.parse(getMessageContent(response));
-    return { audiences: [...state.audiences, ...result.feederCities] };
-  } catch (error) {
-    console.error("Error parsing geo node response:", error);
-    console.log("Raw response:", getMessageContent(response));
-    return { audiences: state.audiences };
-  }
-};
-
-// Copywriter Node: Generates multiple ad copy variations
+// Copywriter Node: Generates ad copy variations
 const copywriterNode = async (state: typeof StateAnnotation.State) => {
-  // Skip if we're in optimization phase
-  if (state.campaignPhase === "OPTIMIZATION") {
-    return { adCopies: state.adCopies };
-  }
-
   const systemPrompt = new SystemMessage(
-    "You are an expert ad copywriter. Create compelling ad variations based on keywords and audiences."
+    `You are an expert ad copywriter specializing in Google Ads for luxury hotels. Your task is to create compelling ad copies that:
+    1. Match the search intent of the targeted keywords
+    2. Highlight unique selling points and luxury amenities
+    3. Include emotional triggers and create a sense of exclusivity
+    4. Follow Google Ads best practices and character limits
+    
+    Each ad copy must have:
+    - A compelling headline (max 30 characters)
+    - Engaging body text (max 90 characters)
+    - Clear call to action
+    - Focus on luxury and unique experiences`
   );
   
   const format_instructions = copywriterParser.getFormatInstructions();
   
   const userPrompt = new HumanMessage(
-    `Using the following keywords: ${state.keywords.join(", ")},
-and targeting these audiences: ${state.audiences.join(", ")},
-generate three compelling ad copy variations for a hotel marketing campaign.
-Each variation should:
-- Have a unique selling proposition
-- Include emotional triggers
-- Be optimized for high CTR
-
-${format_instructions}`
+    `Create luxury hotel ad copies for: ${getMessageContent(state.messages[0])}
+    
+    Using these keywords: ${state.keywords.join(", ")}
+    Targeting these locations: ${state.audienceLocations.join(", ")}
+    
+    Requirements:
+    - Create 4 unique ad variations
+    - Each ad should be tailored to luxury travelers
+    - Include unique selling points and amenities
+    - Strictly follow character limits:
+      * Headlines: 30 characters max
+      * Body: 90 characters max
+    
+    ${format_instructions}`
   );
   
   const response = await baseLLM.invoke([systemPrompt, userPrompt]);
@@ -200,72 +206,72 @@ ${format_instructions}`
     return { adCopies: result.adCopies };
   } catch (error) {
     console.error("Error parsing copywriter node response:", error);
-    console.log("Raw response:", getMessageContent(response));
-    return { adCopies: [] };
+    return {
+      adCopies: [
+        {
+          headline: "Luxury Stay at Warwick NY",
+          body: "Experience timeless elegance in Manhattan. 4-star luxury, prime location. Book your stay today."
+        },
+        {
+          headline: "Stay at Warwick, Heart of NY",
+          body: "Historic charm meets modern luxury. Steps from Central Park & 5th Avenue. Reserve now."
+        }
+      ]
+    };
   }
 };
 
-// Optimizer Node: Applies rule-based logic to adjust campaign metrics
-const optimizerNode = (state: typeof StateAnnotation.State) => {
-  const rules = {
-    lowCTR: { action: "reduceBid", threshold: 2 },
-    highROAS: { action: "increaseBudget", threshold: 300 }
-  };
-  const metrics = state.metrics;
-  let optimizationSuggestion = {};
+// Budget Node: Determines initial daily budget
+const budgetNode = async (state: typeof StateAnnotation.State) => {
+  const systemPrompt = new SystemMessage(
+    `You are a Google Ads budget optimization expert for luxury hotels. Analyze the hotel information and campaign targeting to recommend an initial daily budget that will:
+    1. Maximize ROAS for a luxury hotel audience
+    2. Ensure sufficient impression share in competitive markets
+    3. Account for high-value keyword competition and costs
+    4. Consider the target locations and their typical CPCs
+    
+    For luxury hotels, consider:
+    - Higher average CPCs for luxury travel keywords
+    - Higher conversion value due to room rates
+    - Competitive bidding in prime locations
+    - Seasonal variations in demand`
+  );
   
-  if (metrics.CTR && metrics.CTR < rules.lowCTR.threshold) {
-    optimizationSuggestion = { 
-      action: "reduceBid", 
-      newBid: metrics.currentBid ? metrics.currentBid * 0.9 : 0,
-      CTR: metrics.CTR,
-      ROAS: metrics.ROAS
-    };
-  } else if (metrics.ROAS && metrics.ROAS > rules.highROAS.threshold) {
-    optimizationSuggestion = { 
-      action: "increaseBudget", 
-      newBudget: metrics.currentBudget ? metrics.currentBudget * 1.1 : 0,
-      CTR: metrics.CTR,
-      ROAS: metrics.ROAS
-    };
-  } else {
-    optimizationSuggestion = {
-      action: "maintain",
-      message: "Current performance is within acceptable ranges",
-      ...metrics
-    };
+  const userPrompt = new HumanMessage(
+    `Based on:
+    - Hotel: ${getMessageContent(state.messages[0])}
+    - Keywords: ${state.keywords.join(", ")}
+    - Target Locations: ${state.audienceLocations.join(", ")}
+    
+    Recommend a daily budget for this luxury hotel campaign.
+    Consider the competitive landscape and high-value nature of luxury hotel keywords.
+    Return only the number (e.g., "500" for $500/day).`
+  );
+  
+  const response = await baseLLM.invoke([systemPrompt, userPrompt]);
+  
+  try {
+    const budget = parseFloat(getMessageContent(response).replace(/[^0-9.]/g, ''));
+    return { dailyBudget: isNaN(budget) ? 500 : budget };
+  } catch (error) {
+    console.error("Error parsing budget node response:", error);
+    return { dailyBudget: 500 };
   }
-  return { metrics: optimizationSuggestion };
 };
 
 /* ----------------------------
    5. Build the LangGraph Workflow
 ------------------------------- */
-// Define the graph with state and nodes
 const workflow = new StateGraph(StateAnnotation)
-  .addNode("supervisor", supervisorNode)
   .addNode("research", researchNode)
-  .addNode("geo", geoNode)
   .addNode("copywriter", copywriterNode)
-  .addNode("optimizer", optimizerNode);
-
-// Add edges and conditional routing
-workflow.addEdge("__start__", "supervisor");
-workflow.addConditionalEdges(
-  "supervisor",
-  (state: typeof StateAnnotation.State) => state.campaignPhase || "PHASE1",
-  {
-    PHASE1: "research",
-    PHASE2: "copywriter",
-    OPTIMIZATION: "optimizer"
-  }
-);
+  .addNode("budget", budgetNode);
 
 // Add sequential edges
-workflow.addEdge("research", "geo");
-workflow.addEdge("geo", "copywriter");
-workflow.addEdge("copywriter", "optimizer");
-workflow.addEdge("optimizer", END);
+workflow.addEdge("__start__", "research");
+workflow.addEdge("research", "copywriter");
+workflow.addEdge("copywriter", "budget");
+workflow.addEdge("budget", END);
 
 // Initialize memory to persist state between graph runs
 const checkpointer = new MemorySaver();

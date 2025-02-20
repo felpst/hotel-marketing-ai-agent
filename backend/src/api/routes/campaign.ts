@@ -51,7 +51,6 @@ interface OptimizationRequest extends Request {
 // Campaign generation endpoint
 router.post('/generate', validateCampaignInput, async (req: CampaignRequest, res: Response) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -70,14 +69,12 @@ router.post('/generate', validateCampaignInput, async (req: CampaignRequest, res
     const initialState = {
       messages: [new HumanMessage(JSON.stringify(hotelInfo))],
       keywords: [],
-      audiences: [],
+      audienceLocations: [],
       adCopies: [],
-      metrics: {},
-      campaignPhase: undefined
+      dailyBudget: 0
     };
 
     console.log('Starting campaign generation for:', hotelName);
-    console.log('Initial state:', JSON.stringify(initialState, null, 2));
 
     // Run the campaign graph
     const result = await campaignGraph.invoke(initialState, {
@@ -90,16 +87,16 @@ router.post('/generate', validateCampaignInput, async (req: CampaignRequest, res
     const response = {
       status: 'success',
       campaign: {
-        hotelInfo,
-        keywords: result.keywords,
-        audiences: result.audiences,
-        adCopies: result.adCopies,
-        metrics: result.metrics,
-        phase: result.campaignPhase
+        keywords: result.keywords || [],
+        adCopies: result.adCopies || [],
+        audienceLocations: result.audienceLocations || [],
+        dailyBudget: result.dailyBudget || 500
       }
     };
 
     console.log('Campaign generation completed for:', hotelName);
+    console.log('Generated response:', JSON.stringify(response, null, 2));
+    
     res.json(response);
 
   } catch (error: unknown) {
@@ -130,12 +127,11 @@ router.post('/optimize', [
 
     // Initialize optimization state
     const optimizationState = {
-      messages: [],
+      messages: [new HumanMessage(JSON.stringify({ metrics }))],
       keywords: [],
-      audiences: [],
+      audienceLocations: [],
       adCopies: [],
-      metrics,
-      campaignPhase: 'OPTIMIZATION'
+      dailyBudget: metrics.currentBudget || 0
     };
 
     console.log('Starting campaign optimization with metrics:', metrics);
@@ -147,16 +143,27 @@ router.post('/optimize', [
       }
     });
 
-    res.json({
+    // Calculate optimization recommendations
+    const currentBudget = metrics.currentBudget || 0;
+    const recommendedBudget = result.dailyBudget;
+    const budgetChange = recommendedBudget - currentBudget;
+    
+    const optimizationResponse = {
       status: 'success',
       optimization: {
-        metrics: result.metrics,
+        currentMetrics: {
+          CTR: metrics.CTR || 0,
+          ROAS: metrics.ROAS || 0
+        },
         recommendations: {
-          bid: result.metrics.newBid,
-          budget: result.metrics.newBudget
+          action: budgetChange > 0 ? 'increase' : budgetChange < 0 ? 'decrease' : 'maintain',
+          budget: recommendedBudget,
+          message: `Recommended daily budget: $${recommendedBudget}`
         }
       }
-    });
+    };
+
+    res.json(optimizationResponse);
 
   } catch (error: unknown) {
     console.error('Campaign optimization failed:', error);
