@@ -119,41 +119,38 @@ export default function CampaignOptimizer() {
           <h2 className="text-xl font-semibold mb-4">Optimization Results</h2>
           
           <div className="space-y-4">
-            <div>
-              <span className="font-medium">Recommended Action:</span>
-              <span className="ml-2 text-blue-600 capitalize">{result.action}</span>
-            </div>
+            {result.recommendations && (
+              <>
+                <div>
+                  <span className="font-medium">Recommended Action:</span>
+                  <span className="ml-2 text-blue-600 capitalize">{result.recommendations.action}</span>
+                </div>
 
-            {result.newBid && (
-              <div>
-                <span className="font-medium">New Recommended Bid:</span>
-                <span className="ml-2">${result.newBid.toFixed(2)}</span>
-              </div>
+                <div>
+                  <span className="font-medium">Recommended Budget:</span>
+                  <span className="ml-2">${result.recommendations.budget.toFixed(2)}</span>
+                </div>
+
+                {result.recommendations.message && (
+                  <div className="text-gray-600 mt-2">
+                    {result.recommendations.message}
+                  </div>
+                )}
+              </>
             )}
 
-            {result.newBudget && (
-              <div>
-                <span className="font-medium">New Recommended Budget:</span>
-                <span className="ml-2">${result.newBudget.toFixed(2)}</span>
+            {result.currentMetrics && (
+              <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4">
+                <div>
+                  <span className="font-medium">Current CTR:</span>
+                  <span className="ml-2">{result.currentMetrics.CTR.toFixed(2)}%</span>
+                </div>
+                <div>
+                  <span className="font-medium">Current ROAS:</span>
+                  <span className="ml-2">{result.currentMetrics.ROAS.toFixed(2)}%</span>
+                </div>
               </div>
             )}
-
-            {result.message && (
-              <div className="text-gray-600 mt-2">
-                {result.message}
-              </div>
-            )}
-
-            <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4">
-              <div>
-                <span className="font-medium">Current CTR:</span>
-                <span className="ml-2">{result.CTR.toFixed(2)}%</span>
-              </div>
-              <div>
-                <span className="font-medium">Current ROAS:</span>
-                <span className="ml-2">{result.ROAS.toFixed(2)}%</span>
-              </div>
-            </div>
           </div>
         </div>
       )}

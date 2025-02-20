@@ -72,7 +72,7 @@ const StateAnnotation = Annotation.Root({
    3. LLM Configuration
 ------------------------------- */
 const baseLLM = new ChatOpenAI({
-  modelName: "gpt-4",
+  modelName: "gpt-4o",
   temperature: 0.3,
 });
 

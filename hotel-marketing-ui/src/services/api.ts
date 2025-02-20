@@ -27,12 +27,15 @@ export interface CampaignMetrics {
 }
 
 export interface OptimizationResult {
-  action: string;
-  newBid?: number;
-  newBudget?: number;
-  message?: string;
-  CTR: number;
-  ROAS: number;
+  currentMetrics: {
+    CTR: number;
+    ROAS: number;
+  };
+  recommendations: {
+    action: string;
+    budget: number;
+    message: string;
+  };
 }
 
 const api = {
