@@ -1,40 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../middleware/errorHandler';
+import { campaignGraph } from '../graph/campaignGraph';
+import { HumanMessage } from "@langchain/core/messages";
 
 interface CampaignRequest {
   hotelName: string;
   hotelUrl: string;
+  hotelDetails?: Record<string, any>;
 }
-
-// Temporary mock response until we implement LangGraph.js
-const generateMockCampaign = (input: CampaignRequest) => {
-  return {
-    keywords: [
-      'luxury hotel',
-      'boutique accommodation',
-      'city center hotel',
-      'hotel deals',
-      'best rates guaranteed'
-    ],
-    adCopies: [
-      {
-        headline: `Experience Luxury at ${input.hotelName}`,
-        body: 'Discover exceptional comfort and world-class service in the heart of the city.'
-      },
-      {
-        headline: 'Special Offers Available',
-        body: 'Book directly for exclusive rates and premium perks. Limited time offer.'
-      }
-    ],
-    audiences: [
-      'Business Travelers',
-      'Luxury Travelers',
-      'Couples',
-      'Weekend Getaway Seekers'
-    ],
-    dailyBudget: 150.00
-  };
-};
 
 export const generateCampaign = async (
   req: Request,
@@ -42,16 +15,45 @@ export const generateCampaign = async (
   next: NextFunction
 ) => {
   try {
-    const { hotelName, hotelUrl } = req.body as CampaignRequest;
+    const { hotelName, hotelUrl, hotelDetails = {} } = req.body as CampaignRequest;
 
-    // TODO: Implement actual LangGraph.js workflow here
-    const campaign = generateMockCampaign({ hotelName, hotelUrl });
+    // Prepare hotel information
+    const hotelInfo = {
+      name: hotelName,
+      website: hotelUrl,
+      ...hotelDetails
+    };
+
+    // Initialize the workflow state
+    const initialState = {
+      messages: [new HumanMessage(JSON.stringify(hotelInfo))],
+      keywords: [],
+      audienceLocations: [],
+      adCopies: [],
+      dailyBudget: 0
+    };
+
+    // Run the campaign graph
+    const result = await campaignGraph.invoke(initialState, {
+      configurable: {
+        thread_id: `campaign-${Date.now()}-${hotelName.toLowerCase().replace(/\s+/g, '-')}`
+      }
+    });
+
+    // Format the response
+    const campaign = {
+      keywords: result.keywords || [],
+      adCopies: result.adCopies || [],
+      audienceLocations: result.audienceLocations || [],
+      dailyBudget: result.dailyBudget || 500
+    };
 
     res.status(200).json({
       status: 'success',
       data: campaign
     });
   } catch (error) {
+    console.error('Campaign generation failed:', error);
     next(new AppError('Failed to generate campaign', 500));
   }
 }; 

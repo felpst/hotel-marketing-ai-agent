@@ -28,10 +28,9 @@ async function testCampaignGraph() {
     const initialState = {
       messages: [new HumanMessage(JSON.stringify(hotelDetails))],
       keywords: [],
-      audiences: [],
+      audienceLocations: [],
       adCopies: [],
-      metrics: {},
-      campaignPhase: undefined
+      dailyBudget: 0
     };
 
     console.log("Initial State:", JSON.stringify(initialState, null, 2), "\n");
@@ -47,10 +46,9 @@ async function testCampaignGraph() {
     // Log the results
     console.log("Final State:");
     console.log("Keywords:", result.keywords);
-    console.log("Audiences:", result.audiences);
+    console.log("Audience Locations:", result.audienceLocations);
     console.log("Ad Copies:", JSON.stringify(result.adCopies, null, 2));
-    console.log("Campaign Phase:", result.campaignPhase);
-    console.log("Metrics:", result.metrics);
+    console.log("Daily Budget:", result.dailyBudget);
 
   } catch (error) {
     console.error("Error running campaign graph:", error);
